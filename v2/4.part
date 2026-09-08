@@ -28,6 +28,29 @@ function updateScene2(dt,now){const elapsed=(now-worldStart)/1000;const suction=
 }
 restart.onclick=()=>location.reload();
 
+// FIX: Raycaster returns world-space coordinates, while dust particles live in portrait-local space.
+// Convert the hit point back into portrait local coordinates before erasing dust.
+screenToPortrait = function(clientX,clientY){
+  mouseN.set(clientX/innerWidth*2-1,-clientY/innerHeight*2+1);
+  ray.setFromCamera(mouseN,camera);
+  const hit=ray.intersectObject(portrait,false)[0];
+  if(!hit)return null;
+  return portrait.worldToLocal(hit.point.clone());
+};
+
+// Make the first interaction feel responsive instead of requiring microscopic scrubbing.
+const originalWipeAt=wipeAt;
+wipeAt=function(x,y){
+  if(entered||pull>.02)return;
+  const before=dustProgress;
+  originalWipeAt(x,y);
+  if(dustProgress>before){
+    cursor.classList.add('active');
+    clearTimeout(wipeAt._t);
+    wipeAt._t=setTimeout(()=>{if(!dragging&&!scene2)cursor.classList.remove('active')},90);
+  }
+};
+
 const clock=new THREE.Clock();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min(.033,clock.getDelta());portalUniforms.uTime.value=now*.001;motes.rotation.z=now*.000015;motes.position.y=Math.sin(now*.0004)*.08;
   if(!scene2){camera.position.x+=((targetCam.x)-camera.position.x)*.035;camera.position.y+=((-targetCam.y)-camera.position.y)*.035;portraitGroup.rotation.y+=((targetCam.x*.35)-portraitGroup.rotation.y)*.04;portraitGroup.rotation.x+=((-targetCam.y*.2)-portraitGroup.rotation.x)*.04;deformFlap();if(transitioning)runTransition(now);}
