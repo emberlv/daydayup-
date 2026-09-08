@@ -1,10 +1,11 @@
 y planes
   const bgMat=new THREE.ShaderMaterial({side:THREE.DoubleSide,depthWrite:false,uniforms:{uTime:{value:0}},vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,fragmentShader:`varying vec2 vUv;uniform float uTime;float h(vec2 p){return fract(sin(dot(p,vec2(41.3,289.1)))*43758.2);}void main(){vec2 p=vUv-.5;float r=length(p);float a=atan(p.y,p.x);float band=.5+.5*sin(a*5.-r*26.-uTime*.7);float n=h(floor(vUv*120.));vec3 c=mix(vec3(.008,.025,.09),vec3(.02,.14,.36),band*.55);c+=step(.992,n)*vec3(1.,.75,.25);gl_FragColor=vec4(c,1.);}`});
   const bg=new THREE.Mesh(new THREE.PlaneGeometry(18,11),bgMat);bg.position.z=-5;vortexWorld.add(bg);vortexWorld.userData.bg=bgMat;
-  const vMat=portalMat.clone();vMat.uniforms={uTime:{value:0},uPull:{value:1},uBoost:{value:.7}};const bigV=new THREE.Mesh(new THREE.CircleGeometry(3.5,128),vMat);bigV.position.set(1.8,1.7,-2.2);bigV.rotation.z=.25;vortexWorld.add(bigV);vortexWorld.userData.vmat=vMat;
+  const vMat=portalMat.clone();vMat.uniforms={uTime:{value:0},uPull:{value:1},uBoost:{value:.7}};const bigV=new THREE.Mesh(new THREE.CircleGeometry(3.5,128),vMat);bigV.position.set(1.8,1.7,-2.2);bigV.rotation.z=.25;vortexWorld.add(bigV);vortexWorld.userData.vmat=vMat;vortexWorld.userData.bigV=bigV;
   const starsN=2600,arr=new Float32Array(starsN*3);for(let i=0;i<starsN;i++){const a=Math.random()*Math.PI*2,r=.3+Math.pow(Math.random(),.62)*8;arr[i*3]=1.8+Math.cos(a)*r;arr[i*3+1]=1.7+Math.sin(a)*r*.58;arr[i*3+2]=-4+Math.random()*7;}
   const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(arr,3));const sp=new THREE.Points(sg,new THREE.PointsMaterial({size:.026,color:0xf8cf71,transparent:true,opacity:.75,blending:THREE.AdditiveBlending,depthWrite:false}));vortexWorld.add(sp);vortexWorld.userData.stars=sp;
-  // stylised low-poly 3D protagonist
+
+  // stylised low-poly protagonist; the point here is spatial motion, not character realism yet.
   hero=new THREE.Group();
   const skin=new THREE.MeshStandardMaterial({color:0xc9864f,roughness:.9});
   const coat=new THREE.MeshStandardMaterial({color:0x174f86,roughness:.88});
@@ -13,43 +14,57 @@ y planes
   const headM=new THREE.Mesh(new THREE.IcosahedronGeometry(.24,2),skin); headM.position.y=.92; hero.add(headM);
   const hairM=new THREE.Mesh(new THREE.IcosahedronGeometry(.255,1),hair); hairM.scale.set(1.03,.72,1.02); hairM.position.y=1.05; hero.add(hairM);
   const bodyM=new THREE.Mesh(new THREE.CylinderGeometry(.34,.43,.92,10),coat); bodyM.position.y=.3; hero.add(bodyM);
-  const legGeo=new THREE.CylinderGeometry(.11,.12,.72,8); const la=new THREE.Mesh(legGeo,dark),lb=new THREE.Mesh(legGeo,dark); la.position.set(-.18,-.46,0); lb.position.set(.18,-.46,0); la.rotation.z=-.09;lb.rotation.z=.09;hero.add(la,lb);
-  const armGeo=new THREE.CylinderGeometry(.085,.10,.76,8); const aa=new THREE.Mesh(armGeo,coat),ab=new THREE.Mesh(armGeo,coat);aa.position.set(-.48,.38,0);ab.position.set(.48,.42,0);aa.rotation.z=-.72;ab.rotation.z=.78;hero.add(aa,ab);
-  hero.scale.setScalar(.94); hero.position.set(-.65,heroY,0); hero.rotation.y=-.18; vortexWorld.add(hero);
-  // floor ribbons
-  for(let i=0;i<28;i++){const geo=new THREE.PlaneGeometry(.08+Math.random()*.09,1.0+Math.random()*1.8);const m=new THREE.MeshBasicMaterial({color:i%3===0?0xe2a63d:0x1d4d72,transparent:true,opacity:.32,side:THREE.DoubleSide});const q=new THREE.Mesh(geo,m);q.position.set((Math.random()-.5)*9,-3.5+Math.random()*.5,-1+Math.random()*3);q.rotation.z=(Math.random()-.5)*.5;q.userData.sway=Math.random()*6.28;vortexWorld.add(q);}
-}
-function resist(){if(!scene2)return;heroV-=.52;const g=new THREE.RingGeometry(.12,.28,28);const m=new THREE.MeshBasicMaterial({color:0xffc64b,transparent:true,opacity:.9,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false});const r=new THREE.Mesh(g,m);r.position.set(hero?hero.position.x:-.65,-3.0,.15);vortexWorld.add(r);anchorBursts.push({m:r,t:0});}
-function updateScene2(dt,now){const elapsed=(now-worldStart)/1000;const suction=.18+Math.min(.56,elapsed*.028);heroV+=suction*dt;heroV*=Math.pow(.988,dt*60);heroY+=heroV*dt;const minY=-2.35+Math.max(0,elapsed-9)*.05;heroY=Math.max(minY,heroY);if(hero){hero.position.y=heroY;hero.rotation.z=Math.sin(now*.003)*.035;hero.position.x=-.65+Math.sin(now*.0014)*.08;}
-  vortexWorld.userData.vmat.uniforms.uTime.value=now*.001;vortexWorld.userData.bg.uniforms.uTime.value=now*.001;vortexWorld.userData.stars.rotation.z-=dt*(.025+elapsed*.0025);
-  for(let i=anchorBursts.length-1;i>=0;i--){const b=anchorBursts[i];b.t+=dt;b.m.scale.setScalar(1+b.t*4);b.m.material.opacity=Math.max(0,.9-b.t*1.8);b.m.position.y+=dt*.12;if(b.t>.55){vortexWorld.remove(b.m);b.m.geometry.dispose();b.m.material.dispose();anchorBursts.splice(i,1)}}
-  if(elapsed>14){hint.innerHTML='<strong>它越来越强</strong><small>你只能延缓它</small>'}
-  if(elapsed>22||heroY>2.2){hint.classList.add('hidden');restart.style.display='block';stageLabel.textContent='III · INTO THE VORTEX';if(hero){hero.scale.multiplyScalar(.993);hero.position.x=THREE.MathUtils.lerp(hero.position.x,1.8,.008)}}
-}
-restart.onclick=()=>location.reload();
+  const legGeo=new THREE.CylinderGeometry(.11,.12,.72,8); const la=new THREE.Mesh(legGeo,dark),lb=new THREE.Mesh(legGeo,dark);la.position.set(-.18,-.46,0);lb.position.set(.18,-.46,0);la.rotation.z=-.09;lb.rotation.z=.09;hero.add(la,lb);
+  const armGeo=new THREE.CylinderGeometry(.085,.10,.76,8);const aa=new THREE.Mesh(armGeo,coat),ab=new THREE.Mesh(armGeo,coat);aa.position.set(-.48,.38,0);ab.position.set(.48,.42,0);aa.rotation.z=-.72;ab.rotation.z=.78;hero.add(aa,ab);
+  hero.scale.setScalar(.94);hero.position.set(-.65,heroY,0);hero.rotation.y=-.18;vortexWorld.add(hero);
 
-// FIX: Raycaster returns world-space coordinates, while dust particles live in portrait-local space.
-// Convert the hit point back into portrait local coordinates before erasing dust.
-screenToPortrait = function(clientX,clientY){
-  mouseN.set(clientX/innerWidth*2-1,-clientY/innerHeight*2+1);
-  ray.setFromCamera(mouseN,camera);
-  const hit=ray.intersectObject(portrait,false)[0];
-  if(!hit)return null;
-  return portrait.worldToLocal(hit.point.clone());
-};
+  // brush-like ground strips give depth/parallax as the camera moves.
+  for(let i=0;i<34;i++){const geo=new THREE.PlaneGeometry(.07+Math.random()*.1,1.0+Math.random()*2.2);const m=new THREE.MeshBasicMaterial({color:i%3===0?0xe2a63d:0x1d4d72,transparent:true,opacity:.3,side:THREE.DoubleSide});const q=new THREE.Mesh(geo,m);q.position.set((Math.random()-.5)*9,-3.5+Math.random()*.55,-1+Math.random()*3);q.rotation.z=(Math.random()-.5)*.55;q.userData.sway=Math.random()*6.28;vortexWorld.add(q);}
+}
 
-// Make the first interaction feel responsive instead of requiring microscopic scrubbing.
-const originalWipeAt=wipeAt;
-wipeAt=function(x,y){
-  if(entered||pull>.02)return;
-  const before=dustProgress;
-  originalWipeAt(x,y);
-  if(dustProgress>before){
-    cursor.classList.add('active');
-    clearTimeout(wipeAt._t);
-    wipeAt._t=setTimeout(()=>{if(!dragging&&!scene2)cursor.classList.remove('active')},90);
+function makeAnchor(now){
+  if(now-lastAnchor<130)return;lastAnchor=now;
+  const g=new THREE.RingGeometry(.1,.27,28);const m=new THREE.MeshBasicMaterial({color:0xffc64b,transparent:true,opacity:.82,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false});
+  const r=new THREE.Mesh(g,m);r.position.set(hero?hero.position.x:-.65,-3.0,.15);r.rotation.z=Math.random()*.5;vortexWorld.add(r);anchorBursts.push({m:r,t:0});
+}
+
+function beginFinalChapter(){
+  if(finalPhase)return;finalPhase=true;holding=false;setChapter(4,'IV · INTO THE VORTEX');hint.classList.remove('hidden');hint.innerHTML='<strong>有些力量无法永远抵抗</strong><small>滚轮向下，或按住鼠标向下拖动</small>';cursor.classList.remove('active');
+}
+
+function updateScene2(dt,now){
+  const elapsed=(now-worldStart)/1000;
+  const suction=.12+Math.min(.48,elapsed*.022);
+
+  if(!finalPhase){
+    // Press-and-hold continuously changes the physics, like Nomadic Tribe's hold-to-speed-up interaction.
+    if(holding){heroV-=1.12*dt;makeAnchor(now);vortexWorld.userData.vmat.uniforms.uBoost.value=.95;bloom.strength=1.12;}
+    else{vortexWorld.userData.vmat.uniforms.uBoost.value=.65;bloom.strength=.92;}
+    heroV+=suction*dt;heroV*=Math.pow(.989,dt*60);heroY+=heroV*dt;
+    const risingFloor=-2.35+Math.max(0,elapsed-8)*.035;heroY=Math.max(risingFloor,heroY);
+    if(elapsed>8)hint.innerHTML=holding?'<strong>你还能把他留住一会儿</strong><small>松手，世界会立刻重新把他带走</small>':'<strong>不要松开太久</strong><small>按住鼠标，对抗天空的牵引</small>';
+    if(elapsed>18)beginFinalChapter();
+  } else {
+    // Final chapter is scroll/drag driven: input is a timeline, not a button.
+    const e=THREE.MathUtils.smoothstep(Math.min(1,finalScroll),0,1);
+    heroY=THREE.MathUtils.lerp(heroY,1.15,e*.045);
+    if(hero){hero.position.x=THREE.MathUtils.lerp(hero.position.x,1.8,e*.055);hero.position.z=THREE.MathUtils.lerp(hero.position.z,-1.8,e*.04);hero.scale.setScalar(.94*(1-e*.58));}
+    camera.position.x=THREE.MathUtils.lerp(camera.position.x,1.8,e*.035);camera.position.y=THREE.MathUtils.lerp(camera.position.y,1.65,e*.035);camera.position.z=THREE.MathUtils.lerp(camera.position.z,3.4,e*.03);
+    camera.fov=48+e*22;camera.updateProjectionMatrix();
+    vortexWorld.userData.bigV.scale.setScalar(1+e*1.7);vortexWorld.userData.vmat.uniforms.uBoost.value=.75+e*1.8;bloom.strength=.95+e*1.25;
+    fade.style.opacity=Math.max(0,(e-.72)/.28)*.75;
+    if(finalScroll>=1){hint.classList.add('hidden');stageLabel.textContent='IV · INSIDE';restart.style.display='block';}
   }
-};
+
+  if(hero&&!finalPhase){hero.position.y=heroY;hero.rotation.z=Math.sin(now*.003)*.045;hero.position.x=-.65+Math.sin(now*.0014)*.08;hero.rotation.x=Math.sin(now*.002)*.025;}
+  vortexWorld.userData.vmat.uniforms.uTime.value=now*.001;vortexWorld.userData.bg.uniforms.uTime.value=now*.001;vortexWorld.userData.stars.rotation.z-=dt*(.028+elapsed*.0025+(holding?.025:0));
+  for(let i=anchorBursts.length-1;i>=0;i--){const b=anchorBursts[i];b.t+=dt;b.m.scale.set(1+b.t*3.2,1+b.t*5.2,1);b.m.material.opacity=Math.max(0,.82-b.t*1.45);b.m.position.y+=dt*(.3+b.t*.9);if(b.t>.65){vortexWorld.remove(b.m);b.m.geometry.dispose();b.m.material.dispose();anchorBursts.splice(i,1)}}
+}
+
+window.addEventListener('wheel',e=>{
+  if(scene2&&finalPhase){e.preventDefault();finalScroll=THREE.MathUtils.clamp(finalScroll+Math.max(0,e.deltaY)/900,0,1.15);}
+},{passive:false});
+restart.onclick=()=>location.reload();
 
 const clock=new THREE.Clock();
 function animate(now){requestAnimationFrame(animate);const dt=Math.min(.033,clock.getDelta());portalUniforms.uTime.value=now*.001;motes.rotation.z=now*.000015;motes.position.y=Math.sin(now*.0004)*.08;
