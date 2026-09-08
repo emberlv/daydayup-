@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-<title>Into Vincent — WebGL V2</title>
+<title>Into Vincent — WebGL V3</title>
 <style>
   html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a;color:#eee;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
   #app{position:fixed;inset:0;background:radial-gradient(circle at 50% 40%,#151b26 0,#07090d 46%,#030406 100%)}
   canvas{display:block;width:100%;height:100%;touch-action:none;cursor:none}
   .ui{position:fixed;inset:0;pointer-events:none}
   .title{position:absolute;left:34px;top:26px;font-size:12px;letter-spacing:.28em;color:rgba(255,255,255,.55);text-transform:uppercase}
-  .stage{position:absolute;right:34px;top:26px;font-size:11px;letter-spacing:.22em;color:rgba(255,255,255,.42)}
+  .stage{position:absolute;right:34px;top:26px;font-size:11px;letter-spacing:.22em;color:rgba(255,255,255,.42);transition:.5s}
   .hint{position:absolute;left:50%;bottom:42px;transform:translateX(-50%);text-align:center;transition:.45s ease;white-space:nowrap;text-shadow:0 1px 10px rgba(0,0,0,.8)}
   .hint strong{display:block;font-family:Georgia,serif;font-weight:400;font-style:italic;font-size:18px;letter-spacing:.04em;color:#e7d6ae}
   .hint small{display:block;margin-top:8px;font-size:11px;letter-spacing:.16em;color:rgba(255,255,255,.5)}
@@ -18,23 +18,26 @@
   .fade{position:absolute;inset:0;background:#071127;opacity:0;transition:opacity .25s;mix-blend-mode:screen}
   .grain{position:absolute;inset:-40%;opacity:.12;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");animation:g 8s steps(8) infinite;pointer-events:none}
   @keyframes g{0%{transform:translate(0,0)}25%{transform:translate(3%,1%)}50%{transform:translate(-1%,4%)}75%{transform:translate(-3%,-2%)}100%{transform:translate(0,0)}}
-  .cursor{position:fixed;width:18px;height:18px;border:1px solid rgba(240,212,151,.72);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;transition:width .16s,height .16s,border-color .16s;background:radial-gradient(circle,rgba(255,225,156,.15),transparent 65%);box-shadow:0 0 24px rgba(255,214,111,.12)}
+  .cursor{position:fixed;width:18px;height:18px;border:1px solid rgba(240,212,151,.72);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;transition:width .16s,height .16s,border-color .16s,opacity .2s;background:radial-gradient(circle,rgba(255,225,156,.15),transparent 65%);box-shadow:0 0 24px rgba(255,214,111,.12)}
   .cursor.active{width:38px;height:38px;border-color:#ffd67f}
-  .wipebar{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);width:140px;height:1px;background:rgba(255,255,255,.12);overflow:hidden;transition:.4s}
-  .wipebar>i{display:block;height:100%;width:0;background:#d7b56d;box-shadow:0 0 8px #d7b56d}
-  .plaque{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);font-family:Georgia,serif;color:#c8b58a;font-size:11px;letter-spacing:.16em;opacity:.72;transition:.5s;text-shadow:0 1px 8px #000}
+  .wipebar{display:none}
+  .plaque{position:absolute;left:50%;bottom:102px;transform:translateX(-50%);font-family:Georgia,serif;color:#c8b58a;font-size:11px;letter-spacing:.16em;opacity:.46;transition:.7s;text-shadow:0 1px 8px #000}
   .restart{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);border:1px solid rgba(255,255,255,.26);background:rgba(0,0,0,.16);color:#eee;padding:10px 16px;letter-spacing:.12em;font-size:11px;border-radius:999px;pointer-events:auto;display:none;backdrop-filter:blur(8px);cursor:pointer}
-  @media(max-width:700px){.title,.stage{top:18px}.title{left:18px}.stage{right:18px}.hint{bottom:32px}.plaque{bottom:92px}}
+  .chapters{position:absolute;right:36px;top:50%;transform:translateY(-50%);display:grid;gap:13px}
+  .chapters i{width:4px;height:4px;border-radius:50%;background:rgba(255,255,255,.22);box-shadow:0 0 0 0 rgba(255,214,127,0);transition:.45s}
+  .chapters i.on{background:#e5c477;box-shadow:0 0 0 5px rgba(229,196,119,.08)}
+  @media(max-width:700px){.title,.stage{top:18px}.title{left:18px}.stage{right:18px}.hint{bottom:32px}.plaque{bottom:90px}.chapters{right:18px}}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <div class="ui">
   <div class="title">INTO VINCENT</div>
-  <div class="stage" id="stageLabel">I · THE PORTRAIT</div>
+  <div class="stage" id="stageLabel">I · AWAKEN</div>
   <div class="plaque" id="plaque">VINCENT VAN GOGH · 1853—1890</div>
   <div class="wipebar" id="wipebar"><i></i></div>
-  <div class="hint" id="hint"><strong>让这幅画苏醒</strong><small>移动鼠标，擦去沉睡在画上的尘埃</small></div>
+  <div class="chapters"><i id="c1" class="on"></i><i id="c2"></i><i id="c3"></i><i id="c4"></i></div>
+  <div class="hint" id="hint"><strong>让画面回应你的手</strong><small>按住鼠标，在画上缓慢拖动</small></div>
   <button class="restart" id="restart">重新进入画中</button>
   <div class="fade" id="fade"></div>
   <div class="grain"></div>
@@ -55,6 +58,8 @@ const wipebar=document.getElementById('wipebar');
 const fade=document.getElementById('fade');
 const cursor=document.getElementById('cursor');
 const restart=document.getElementById('restart');
+const chapterDots=[1,2,3,4].map(i=>document.getElementById('c'+i));
+function setChapter(n,label){chapterDots.forEach((d,i)=>d.classList.toggle('on',i===n-1));stageLabel.textContent=label;}
 
 const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));
