@@ -7,38 +7,60 @@ const motesN=900,motesPos=new Float32Array(motesN*3);for(let i=0;i<motesN;i++){m
 const motesGeo=new THREE.BufferGeometry();motesGeo.setAttribute('position',new THREE.BufferAttribute(motesPos,3));const motes=new THREE.Points(motesGeo,new THREE.PointsMaterial({color:0xd9c091,size:.018,transparent:true,opacity:.35}));scene.add(motes);
 
 let dustProgress=0,pull=0,dragging=false,entered=false,transitioning=false,scene2=false;
+let holding=false,finalPhase=false,finalScroll=0;
 let mouseN=new THREE.Vector2(), mousePx=new THREE.Vector2(innerWidth/2,innerHeight/2), targetCam=new THREE.Vector2();
 const ray=new THREE.Raycaster();
 function screenToPortrait(clientX,clientY){
   mouseN.set(clientX/innerWidth*2-1,-clientY/innerHeight*2+1);ray.setFromCamera(mouseN,camera);
-  const hit=ray.intersectObject(portrait,false)[0];return hit?.point||null;
+  const hit=ray.intersectObject(portrait,false)[0];if(!hit)return null;return portrait.worldToLocal(hit.point.clone());
 }
-function wipeAt(x,y){if(entered||pull>.02)return;const p=screenToPortrait(x,y);if(!p)return;let erased=0;const arr=dustGeo.attributes.position.array, life=dustGeo.attributes.aLife.array;
-  for(let i=0;i<dustN;i++){if(life[i]<=0)continue;const dx=arr[i*3]-p.x,dy=arr[i*3+1]-p.y;if(dx*dx+dy*dy<.33){life[i]=Math.max(0,life[i]-.42);erased++;}}
-  if(erased){dustGeo.attributes.aLife.needsUpdate=true;let left=0;for(let i=0;i<dustN;i++)left+=life[i];dustProgress=1-left/dustN;wipebar.firstElementChild.style.width=Math.min(100,dustProgress*138)+'%';portraitMat.emissiveIntensity=.08+dustProgress*.1;
-    if(dustProgress>.27){hint.innerHTML='<strong>你发现了一根绳子</strong><small>抓住它，向下拉</small>';handle.material.emissive=new THREE.Color(0x5b4018);handle.material.emissiveIntensity=.35;}
-  }}
+function awakenAt(x,y,movement){
+  if(entered||pull>.02||dustProgress>.34)return;
+  const p=screenToPortrait(x,y);if(!p)return;
+  const arr=dustGeo.attributes.position.array,life=dustGeo.attributes.aLife.array;
+  const radius=.28+Math.min(.26,movement*.004);let changed=0;
+  for(let i=0;i<dustN;i++){
+    if(life[i]<=0)continue;const dx=arr[i*3]-p.x,dy=arr[i*3+1]-p.y;
+    if(dx*dx+dy*dy<radius){life[i]=Math.max(0,life[i]-.5);changed++;}
+  }
+  if(changed){
+    dustGeo.attributes.aLife.needsUpdate=true;let left=0;for(let i=0;i<dustN;i++)left+=life[i];dustProgress=1-left/dustN;
+    portraitMat.emissiveIntensity=.08+dustProgress*.36;portalUniforms.uPull.value=Math.min(.34,dustProgress*.8);
+    key.intensity=18+dustProgress*10;blue.intensity=9+dustProgress*13;
+    cursor.classList.add('active');
+    if(dustProgress>.22){setChapter(2,'II · THE TEAR');hint.innerHTML='<strong>画布松动了</strong><small>抓住右侧的绳环，向下拖动</small>';handle.material.emissive=new THREE.Color(0x6f4c18);handle.material.emissiveIntensity=.8;}
+  }
+}
 function projectToScreen(obj){const v=obj.getWorldPosition(new THREE.Vector3()).project(camera);return new THREE.Vector2((v.x*.5+.5)*innerWidth,(-v.y*.5+.5)*innerHeight)}
 
 renderer.domElement.addEventListener('pointermove',e=>{
   mousePx.set(e.clientX,e.clientY);cursor.style.left=e.clientX+'px';cursor.style.top=e.clientY+'px';
   targetCam.set((e.clientX/innerWidth-.5)*.12,(e.clientY/innerHeight-.5)*.08);
-  if(!dragging)wipeAt(e.clientX,e.clientY);
-  if(dragging){const dy=(e.clientY-dragStartY)/Math.max(220,innerHeight*.34);pull=THREE.MathUtils.clamp(startPull+dy,0,1);portalUniforms.uPull.value=pull;if(pull>.15){hint.innerHTML='<strong>继续</strong><small>你正在把画布从现实里撕开</small>';}
+  if(!scene2&&!dragging&&(e.buttons&1))awakenAt(e.clientX,e.clientY,Math.hypot(e.movementX||0,e.movementY||0));
+  if(dragging){
+    const dy=(e.clientY-dragStartY)/Math.max(220,innerHeight*.34);pull=THREE.MathUtils.clamp(startPull+dy,0,1);portalUniforms.uPull.value=Math.max(dustProgress,pull);
+    if(pull>.15){hint.innerHTML='<strong>继续向下</strong><small>你的手正在直接控制画布</small>';}
     if(pull>.82&&!transitioning)beginTransition();
   }
-  const hp=projectToScreen(handle);cursor.classList.toggle('active',hp.distanceTo(mousePx)<48 || dragging || scene2);
+  if(scene2&&finalPhase&&(e.buttons&1))finalScroll=THREE.MathUtils.clamp(finalScroll+Math.abs(e.movementY||0)/420,0,1.35);
+  const hp=projectToScreen(handle);cursor.classList.toggle('active',hp.distanceTo(mousePx)<48 || dragging || holding || (e.buttons&1&&dustProgress<.22));
 });
 let dragStartY=0,startPull=0;
 renderer.domElement.addEventListener('pointerdown',e=>{
-  if(scene2){resist();return}
-  const hp=projectToScreen(handle);if(dustProgress>.22 && hp.distanceTo(new THREE.Vector2(e.clientX,e.clientY))<74){dragging=true;dragStartY=e.clientY;startPull=pull;renderer.domElement.setPointerCapture(e.pointerId);}
+  if(scene2){holding=true;cursor.classList.add('active');return;}
+  if(dustProgress<.22){awakenAt(e.clientX,e.clientY,20);return;}
+  const hp=projectToScreen(handle);
+  if(hp.distanceTo(new THREE.Vector2(e.clientX,e.clientY))<82){dragging=true;dragStartY=e.clientY;startPull=pull;renderer.domElement.setPointerCapture?.(e.pointerId);}
 });
-renderer.domElement.addEventListener('pointerup',e=>{if(dragging&&!transitioning){dragging=false;if(pull<.28)pull*=.28;}});
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(scene2){holding=false;cursor.classList.remove('active');return;}
+  if(dragging&&!transitioning){dragging=false;if(pull<.28)pull*=.28;}
+});
+renderer.domElement.addEventListener('pointercancel',()=>{dragging=false;holding=false;});
 
 function deformFlap(){
   const pos=flapGeo.attributes.position.array;const eased=pull<.18?pull*.18:Math.pow((pull-.18)/.82,.82);
-  for(let i=0;i<pos.length;i+=3){const x=flapBase[i],y=flapBase[i+1];const xn=(x/2.25)+.5;const yn=(y/1.55)+.5;const hinge=1-yn;
+  for(let i=0;i<pos.length;i+=3){const x=flapBase[i],y=flapBase[i+1];const yn=(y/1.55)+.5;const hinge=1-yn;
     const curl=eased*(.25+.95*hinge);pos[i]=x + eased*.14*Math.sin(yn*Math.PI)*Math.sin(x*2.6);pos[i+1]=y+eased*(.36+yn*.38);pos[i+2]=flapBase[i+2]+Math.sin(curl*Math.PI*.86)*(1.05*hinge+.08)-eased*hinge*.34;
   }flapGeo.attributes.position.needsUpdate=true;flapGeo.computeVertexNormals();flap.rotation.x=-eased*1.15;flap.position.y=1.52+eased*.33;flap.position.z=.30+eased*.24;
   handle.position.y=-.25-pull*1.55;handle.position.x=1.65+pull*.08;rebuildRope();
@@ -46,12 +68,15 @@ function deformFlap(){
 
 function easeInOut(t){return t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2}
 let transStart=0;
-function beginTransition(){transitioning=true;dragging=false;transStart=performance.now();hint.classList.add('hidden');plaque.style.opacity=0;wipebar.style.opacity=0;portalUniforms.uBoost.value=1;}
-function runTransition(now){const t=Math.min(1,(now-transStart)/1900),e=easeInOut(t);camera.position.x=.45*e;camera.position.y=1.18*e;camera.position.z=10.2-(8.92*e);camera.fov=38+24*e;camera.updateProjectionMatrix();portal.scale.set(.86+e*6,.63+e*6,1);bloom.strength=.65+e*1.7;fade.style.opacity=(Math.max(0,t-.72)/.28)*.9;
-  if(t>=1&&!scene2)enterVortex();}
+function beginTransition(){transitioning=true;dragging=false;transStart=performance.now();hint.classList.add('hidden');plaque.style.opacity=0;portalUniforms.uBoost.value=1;}
+function runTransition(now){
+  const t=Math.min(1,(now-transStart)/2100),e=easeInOut(t);camera.position.x=.45*e;camera.position.y=1.18*e;camera.position.z=10.2-(8.92*e);camera.fov=38+24*e;camera.updateProjectionMatrix();portal.scale.set(.86+e*6,.63+e*6,1);bloom.strength=.65+e*1.7;fade.style.opacity=(Math.max(0,t-.72)/.28)*.9;
+  if(t>=1&&!scene2)enterVortex();
+}
 
-// Scene 2: procedural spatial vortex
-function enterVortex(){scene2=true;entered=true;portraitGroup.visible=false;vortexWorld.visible=true;fade.style.opacity=0;camera.position.set(0,0,9.4);camera.fov=48;camera.updateProjectionMatrix();scene.fog.density=.018;bloom.strength=.95;stageLabel.textContent='II · RESIST THE SKY';hint.classList.remove('hidden');hint.innerHTML='<strong>别让他被天空带走</strong><small>点击画面，把他重新压回现实</small>';setupVortexWorld();}
-let worldReady=false,hero=null,heroY=-2.2,heroV=0,worldStart=0,anchorBursts=[];
+// Chapter III — same interaction principle as Nomadic Tribe's hold-to-affect-flight sequence:
+// keep the pointer pressed to continuously influence the world instead of clicking a UI button.
+function enterVortex(){scene2=true;entered=true;portraitGroup.visible=false;vortexWorld.visible=true;fade.style.opacity=0;camera.position.set(0,0,9.4);camera.fov=48;camera.updateProjectionMatrix();scene.fog.density=.018;bloom.strength=.95;setChapter(3,'III · RESIST THE SKY');hint.classList.remove('hidden');hint.innerHTML='<strong>天空正在把他带走</strong><small>按住鼠标，让他暂时留在地面</small>';setupVortexWorld();}
+let worldReady=false,hero=null,heroY=-2.2,heroV=0,worldStart=0,anchorBursts=[],lastAnchor=0;
 function setupVortexWorld(){if(worldReady)return;worldReady=true;worldStart=performance.now();
   // deep sk
