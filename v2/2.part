@@ -1,0 +1,88 @@
+w THREE.Group(); root.add(portraitGroup);
+const vortexWorld=new THREE.Group(); vortexWorld.visible=false; root.add(vortexWorld);
+
+const ambient=new THREE.HemisphereLight(0x6c7aa2,0x21170f,.78);scene.add(ambient);
+const key=new THREE.PointLight(0xffd28c,18,22,2);key.position.set(-3.8,4.2,5);scene.add(key);
+const blue=new THREE.PointLight(0x4f7fff,9,18,2);blue.position.set(2.5,1.2,2);scene.add(blue);
+
+function makeFrame(){
+  const g=new THREE.Group();
+  const mat=new THREE.MeshStandardMaterial({color:0x6a421e,roughness:.48,metalness:.48});
+  const trim=new THREE.MeshStandardMaterial({color:0xc39a52,roughness:.34,metalness:.68});
+  const w=5.2,h=6.35,d=.34,t=.33;
+  const add=(x,y,sx,sy,m,z=0)=>{const mesh=new THREE.Mesh(new THREE.BoxGeometry(sx,sy,d),m);mesh.position.set(x,y,z);mesh.castShadow=true;mesh.receiveShadow=true;g.add(mesh)};
+  add(0,h/2+t/2,w+1,t,mat); add(0,-h/2-t/2,w+1,t,mat); add(-w/2-t/2,0,t,h,mat); add(w/2+t/2,0,t,h,mat);
+  add(0,h/2-.08,w+.3,.09,trim,.2); add(0,-h/2+.08,w+.3,.09,trim,.2); add(-w/2+.08,0,.09,h-.25,trim,.2); add(w/2-.08,0,.09,h-.25,trim,.2);
+  return g;
+}
+
+const frame=makeFrame();frame.position.z=.18;portraitGroup.add(frame);
+
+const portraitTex=await loadTex('https://upload.wikimedia.org/wikipedia/commons/thumb/e/ee/Self-Portrait_%28Van_Gogh_September_1889%29.jpg/960px-Self-Portrait_%28Van_Gogh_September_1889%29.jpg');
+const pAspect=portraitTex.image.width/portraitTex.image.height;
+const ph=5.82,pw=ph*pAspect;
+const portraitMat=new THREE.MeshStandardMaterial({map:portraitTex,roughness:.82,metalness:0,emissive:0x1b1e22,emissiveIntensity:.08});
+const portrait=new THREE.Mesh(new THREE.PlaneGeometry(pw,ph,24,24),portraitMat);portrait.position.z=.05;portraitGroup.add(portrait);
+
+// hidden depth plate behind the tear
+const voidDisc=new THREE.Mesh(new THREE.CircleGeometry(1.05,64),new THREE.MeshBasicMaterial({color:0x02030b}));
+voidDisc.position.set(.45,1.2,.11); portraitGroup.add(voidDisc);
+
+const portalUniforms={uTime:{value:0},uPull:{value:0},uBoost:{value:0}};
+const portalMat=new THREE.ShaderMaterial({
+  transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,
+  uniforms:portalUniforms,
+  vertexShader:`varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}`,
+  fragmentShader:`
+    precision highp float; varying vec2 vUv; uniform float uTime,uPull,uBoost;
+    float hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+    float noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),f.x),f.y);}
+    void main(){
+      vec2 p=vUv-.5; float r=length(p); float a=atan(p.y,p.x);
+      float spin=a+5.8*r-uTime*(.48+uPull*.75);
+      vec2 q=vec2(cos(spin),sin(spin))*r*8.;
+      float n=noise(q+uTime*.08)+.5*noise(q*2.1-uTime*.12);
+      float arms=.5+.5*sin(spin*4.2-r*22.+n*3.);
+      float core=smoothstep(.52,.04,r);
+      float rim=smoothstep(.53,.30,r)*smoothstep(.03,.19,r);
+      vec3 deep=vec3(.015,.05,.20), blue=vec3(.05,.33,.85), gold=vec3(1.0,.63,.18);
+      vec3 col=mix(deep,blue,arms*.72+n*.18); col=mix(col,gold,pow(max(arms,0.),7.)*.52);
+      float star=step(.992,hash(floor((vUv+uTime*.0001)*140.)))*(1.-r*1.5);
+      col+=star*vec3(1.5,1.2,.6);
+      float alpha=core*(.38+.58*uPull)+rim*.7;
+      col*=1.1+uBoost*1.8;
+      gl_FragColor=vec4(col,alpha);
+    }`
+});
+const portal=new THREE.Mesh(new THREE.CircleGeometry(1.18,96),portalMat);portal.position.set(.45,1.2,.17);portal.scale.set(.86,.63,1);portraitGroup.add(portal);
+
+// ragged luminous tear boundary
+const tearPts=[]; for(let i=0;i<88;i++){const a=i/88*Math.PI*2;const rr=1+Math.sin(a*7)*.045+Math.sin(a*13)*.024;tearPts.push(new THREE.Vector3(.45+Math.cos(a)*1.03*rr,1.2+Math.sin(a)*.69*rr,.19));}
+const tearGeo=new THREE.BufferGeometry().setFromPoints(tearPts);
+const tear=new THREE.LineLoop(tearGeo,new THREE.LineBasicMaterial({color:0xe9d0a1,transparent:true,opacity:.72}));portraitGroup.add(tear);
+
+// Flap: segmented plane, bent every frame
+const flapTex=portraitTex.clone();
+flapTex.wrapS=flapTex.wrapT=THREE.ClampToEdgeWrapping;
+flapTex.repeat.set(.54,.30); flapTex.offset.set(.24,.61); flapTex.needsUpdate=true;
+const flapGeo=new THREE.PlaneGeometry(2.25,1.55,32,18);
+const flapBase=flapGeo.attributes.position.array.slice();
+const flapMat=new THREE.MeshStandardMaterial({map:flapTex,transparent:true,side:THREE.DoubleSide,roughness:.86,metalness:0});
+const flap=new THREE.Mesh(flapGeo,flapMat);flap.position.set(.15,1.52,.30);flap.rotation.z=-.04;portraitGroup.add(flap);
+
+// Rope as a tube rebuilt while dragging
+let ropeMesh=null;const ropeMat=new THREE.MeshStandardMaterial({color:0xb39159,roughness:.68,metalness:.05});
+const handle=new THREE.Mesh(new THREE.TorusGeometry(.15,.045,10,32),new THREE.MeshStandardMaterial({color:0xd5b06a,roughness:.45,metalness:.28}));handle.rotation.x=Math.PI/2;handle.position.set(1.65,-.25,.72);portraitGroup.add(handle);
+function rebuildRope(){
+  if(ropeMesh){portraitGroup.remove(ropeMesh);ropeMesh.geometry.dispose();}
+  const a=new THREE.Vector3(1.02,1.58,.54), b=handle.position.clone();
+  const mid=new THREE.Vector3((a.x+b.x)/2+.12,(a.y+b.y)/2,.62);
+  const curve=new THREE.CatmullRomCurve3([a,mid,b]);
+  ropeMesh=new THREE.Mesh(new THREE.TubeGeometry(curve,36,.025,7,false),ropeMat);portraitGroup.add(ropeMesh);
+}
+rebuildRope();
+
+// Dust particles over portrait, wiped by pointer proximity
+const dustN=1700,dPos=new Float32Array(dustN*3),dSize=new Float32Array(dustN),dLife=new Float32Array(dustN);
+for(let i=0;i<dustN;i++){dPos[i*3]=(Math.random()-.5)*pw;dPos[i*3+1]=(Math.random()-.5)*ph;dPos[i*3+2]=.24+Math.random()*.06;dSize[i]=1+Math.random()*2.2;dLife[i]=1;}
+const dustGeo=new THREE.B

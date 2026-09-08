@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>Into Vincent — WebGL V2</title>
+<style>
+  html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#05070a;color:#eee;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+  #app{position:fixed;inset:0;background:radial-gradient(circle at 50% 40%,#151b26 0,#07090d 46%,#030406 100%)}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:none}
+  .ui{position:fixed;inset:0;pointer-events:none}
+  .title{position:absolute;left:34px;top:26px;font-size:12px;letter-spacing:.28em;color:rgba(255,255,255,.55);text-transform:uppercase}
+  .stage{position:absolute;right:34px;top:26px;font-size:11px;letter-spacing:.22em;color:rgba(255,255,255,.42)}
+  .hint{position:absolute;left:50%;bottom:42px;transform:translateX(-50%);text-align:center;transition:.45s ease;white-space:nowrap;text-shadow:0 1px 10px rgba(0,0,0,.8)}
+  .hint strong{display:block;font-family:Georgia,serif;font-weight:400;font-style:italic;font-size:18px;letter-spacing:.04em;color:#e7d6ae}
+  .hint small{display:block;margin-top:8px;font-size:11px;letter-spacing:.16em;color:rgba(255,255,255,.5)}
+  .hint.hidden{opacity:0;transform:translate(-50%,12px)}
+  .fade{position:absolute;inset:0;background:#071127;opacity:0;transition:opacity .25s;mix-blend-mode:screen}
+  .grain{position:absolute;inset:-40%;opacity:.12;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.78' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.55'/%3E%3C/svg%3E");animation:g 8s steps(8) infinite;pointer-events:none}
+  @keyframes g{0%{transform:translate(0,0)}25%{transform:translate(3%,1%)}50%{transform:translate(-1%,4%)}75%{transform:translate(-3%,-2%)}100%{transform:translate(0,0)}}
+  .cursor{position:fixed;width:18px;height:18px;border:1px solid rgba(240,212,151,.72);border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;transition:width .16s,height .16s,border-color .16s;background:radial-gradient(circle,rgba(255,225,156,.15),transparent 65%);box-shadow:0 0 24px rgba(255,214,111,.12)}
+  .cursor.active{width:38px;height:38px;border-color:#ffd67f}
+  .wipebar{position:absolute;left:50%;bottom:92px;transform:translateX(-50%);width:140px;height:1px;background:rgba(255,255,255,.12);overflow:hidden;transition:.4s}
+  .wipebar>i{display:block;height:100%;width:0;background:#d7b56d;box-shadow:0 0 8px #d7b56d}
+  .plaque{position:absolute;left:50%;bottom:104px;transform:translateX(-50%);font-family:Georgia,serif;color:#c8b58a;font-size:11px;letter-spacing:.16em;opacity:.72;transition:.5s;text-shadow:0 1px 8px #000}
+  .restart{position:absolute;left:50%;bottom:34px;transform:translateX(-50%);border:1px solid rgba(255,255,255,.26);background:rgba(0,0,0,.16);color:#eee;padding:10px 16px;letter-spacing:.12em;font-size:11px;border-radius:999px;pointer-events:auto;display:none;backdrop-filter:blur(8px);cursor:pointer}
+  @media(max-width:700px){.title,.stage{top:18px}.title{left:18px}.stage{right:18px}.hint{bottom:32px}.plaque{bottom:92px}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="ui">
+  <div class="title">INTO VINCENT</div>
+  <div class="stage" id="stageLabel">I · THE PORTRAIT</div>
+  <div class="plaque" id="plaque">VINCENT VAN GOGH · 1853—1890</div>
+  <div class="wipebar" id="wipebar"><i></i></div>
+  <div class="hint" id="hint"><strong>让这幅画苏醒</strong><small>移动鼠标，擦去沉睡在画上的尘埃</small></div>
+  <button class="restart" id="restart">重新进入画中</button>
+  <div class="fade" id="fade"></div>
+  <div class="grain"></div>
+</div>
+<div class="cursor" id="cursor"></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js';
+import { EffectComposer } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+const app=document.getElementById('app');
+const hint=document.getElementById('hint');
+const stageLabel=document.getElementById('stageLabel');
+const plaque=document.getElementById('plaque');
+const wipebar=document.getElementById('wipebar');
+const fade=document.getElementById('fade');
+const cursor=document.getElementById('cursor');
+const restart=document.getElementById('restart');
+
+const renderer=new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.8));
+renderer.setSize(innerWidth,innerHeight);
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.05;
+app.appendChild(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x06080c,.035);
+const camera=new THREE.PerspectiveCamera(38,innerWidth/innerHeight,.1,100);
+camera.position.set(0,.1,10.2);
+
+const composer=new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene,camera));
+const bloom=new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.65,.8,.85);
+composer.addPass(bloom);
+
+const texLoader=new THREE.TextureLoader();
+const loadTex=(u)=>new Promise((res,rej)=>texLoader.load(u,t=>{t.colorSpace=THREE.SRGBColorSpace;res(t)},undefined,rej));
+
+const root=new THREE.Group(); scene.add(root);
+const portraitGroup=ne
